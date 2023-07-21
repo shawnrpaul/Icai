@@ -1,12 +1,17 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/tauri"
+  import { Player, Song } from "../player";
 
   let name = "";
-  let greetMsg = ""
+  let greetMsg = "";
 
-  async function greet(){
+  async function greet() {
     // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-    greetMsg = await invoke("greet", { name })
+    let player = Player.getPlayer();
+    player.addSong(new Song(name));
+    if (player.currentSong != null) {
+      return;
+    }
+    await player.play();
   }
 </script>
 
