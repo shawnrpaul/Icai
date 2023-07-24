@@ -2,23 +2,35 @@
   import { Player, Song } from "../player";
 
   let name = "";
-  let greetMsg = "";
+  let player = Player.getPlayer();
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-    let player = Player.getPlayer();
-    player.addSong(new Song(name));
-    if (player.currentSong != null) {
-      return;
+  async function addSong() {
+    await player.addSong(new Song(name));
+  }
+
+  async function pausePlay() {
+    player.isPaused ? await player.play() : await player.pause();
+  }
+
+  async function currentTime() {
+    let time = player.position();
+    if (time == null) {
+      console.log("Not Playing");
+    } else {
+      console.log(`Current time: ${time}/${player.length()}`);
     }
-    await player.play();
   }
 </script>
 
 <div>
-  <form class="row" on:submit|preventDefault={greet}>
+  <form class="row" on:submit|preventDefault={addSong}>
     <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
-    <button type="submit">Greet</button>
+    <button type="submit">Add Song</button>
   </form>
-  <p>{greetMsg}</p>
+  <form class="row" on:submit|preventDefault={pausePlay}>
+    <button type="submit">Play\Pause</button>
+  </form>
+  <form class="row" on:submit|preventDefault={currentTime}>
+    <button type="submit">Time</button>
+  </form>
 </div>

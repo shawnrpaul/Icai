@@ -18,8 +18,9 @@
         "open": true
       },
       "fs": {
+        "all": true,
         "scope": [
-          "$Audio/**/*"
+          "$AUDIO/**/*"
         ]
       }
     },

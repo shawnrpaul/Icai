@@ -1,3 +1,6 @@
+import { readBinaryFile } from "@tauri-apps/api/fs"
+import { createEventDispatcher } from "svelte";
+
 export class Song {
     file: string;
 
@@ -6,13 +9,51 @@ export class Song {
     }
 }
 
+class QueueSong {
+    song: Song;
+    private player: Player;
+    audio: AudioBufferSourceNode;
+    audioContext: AudioContext;
+
+    constructor(song: Song, player: Player) {
+        this.song = song;
+        this.player = player;
+        this.audioContext = new AudioContext();
+        this.audioContext.suspend().then();
+        this.createAudioElement().then();
+    }
+
+    private async getFileBuffer(filePath) {
+        const arrayBuffer = (await readBinaryFile(filePath)).buffer;
+        return await this.audioContext.decodeAudioData(arrayBuffer);
+    }
+
+    private async createAudioElement() {
+        this.audio = this.audioContext.createBufferSource();
+        this.audio.buffer = await this.getFileBuffer(this.song.file);
+        this.audio.connect(this.audioContext.destination);
+        this.audio.onended = () => this.player.playNextSong().then();
+        this.audio.start(0);
+    }
+
+    length() {
+        return this.audio.buffer.duration;
+    }
+
+    async start() {
+        await this.audioContext.resume();
+    }
+
+    async stop() {
+        await this.audioContext.suspend();
+    }
+}
+
 export class Player {
     static _instance: Player = null;
-
-    currentSong: Song;
     isPaused: boolean;
-    queue: Song[];
-    #audio: HTMLAudioElement;
+    private queue: QueueSong[];
+    private currentSong: QueueSong;
 
     static getPlayer() {
         if (this._instance == null) {
@@ -25,67 +66,64 @@ export class Player {
         this.currentSong = null;
         this.queue = [];
         this.isPaused = true;
-        this.#audio = null;
     }
 
-    addSong(song: Song, index: number = -1) {
+    async addSong(song: Song, index: number = -1) {
+        if (this.currentSong == null) {
+            this.currentSong = new QueueSong(song, this);
+            this.isPaused = false;
+            return await this.currentSong.start();
+        }
         if (index < 0) index = this.queue.length;
-        this.queue.splice(index, 0, song);
+        this.queue.splice(index, 0, new QueueSong(song, this));
+        this.queue.forEach(song => {
+            console.log(song.song.file);
+        });
     }
 
     removeSong(index: number) {
         this.queue.splice(index, 1);
     }
 
-    createAudioElement() {
-        if (this.queue.length == 0) {
-            this.#audio = null;
-            return;
-        }
-        this.currentSong = this.queue.shift();
-        this.#audio = new Audio(this.currentSong.file);
-        this.#audio.onended = () => this.playNextSong().then();
+    nowPlaying() {
+        return this.currentSong != null ? this.currentSong.song : null;
     }
 
     async play() {
-        if (this.currentSong == null)
-            this.createAudioElement();
-
-        await this.#audio.play();
+        if (!this.isPaused || this.currentSong == null) return;
+        await this.currentSong.start();
         this.isPaused = false;
     }
 
-    pause() {
-        if (this.currentSong == null)
-            return;
+    async pause() {
+        if (!this.isPaused || this.currentSong == null) return;
 
-        this.#audio.pause();
+        await this.currentSong.stop();
         this.isPaused = true;
     }
 
     position() {
-        if (this.currentSong == null)
-            return 0;
+        if (this.currentSong === null) {
+            return null;
+        }
 
-        return this.#audio.currentTime;
+        return this.currentSong.audioContext.currentTime;
     }
 
     length() {
         if (this.currentSong == null)
             return 0;
-        return this.#audio.duration;
+        return this.currentSong.length();
     }
 
-    seek(position: number) {
-        if (this.currentSong == null)
+    async playNextSong() {
+        this.currentSong = this.queue.shift();
+        if (this.currentSong == null) {
+            this.isPaused = true;
+            console.log("Playing: none");
             return;
-
-        this.#audio.currentTime = position;
-    }
-
-    private async playNextSong() {
-        this.createAudioElement();
-        if (this.#audio != null)
-            await this.#audio.play();
+        }
+        console.log(`Playing: ${this.currentSong.song.file}`);
+        await this.currentSong.start();
     }
 }
